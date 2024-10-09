@@ -20,11 +20,11 @@ ALTER PROCEDURE [stat].[uspAccountUtilizationStatTypeNumeric0109Delete](
 AS
 BEGIN
 	SET NOCOUNT ON
-/*
---For testing
-DECLARE @piPageSize INT = 1000,
-        @pncDelay NCHAR(11) = '00:00:00.01'
-*/
+
+----For testing
+--DECLARE @piPageSize INT = 1000,
+--        @pncDelay NCHAR(11) = '00:00:00.01'
+
 
 -- Step 1: Persistent State Table
 IF OBJECT_ID('dbo.BatchProcessState', 'U') IS NULL
@@ -59,11 +59,13 @@ DECLARE @iLogLevel INT = 3,
 	@LastProcessedStatId SMALLINT = NULL;
 
 -- Step 3: Create Temporary Tables
+DROP TABLE IF EXISTS #tblAUBatchLogId
 CREATE TABLE #tblAUBatchLogId(
     BatchLogId SMALLINT PRIMARY KEY,
     StatGroupId INT
 );
 
+DROP TABLE IF EXISTS #tblStatTypeDelete
 CREATE TABLE #tblStatTypeDelete(
     PartitionId TINYINT,
     KeyElementId BIGINT,
@@ -75,6 +77,7 @@ CREATE TABLE #tblStatTypeDelete(
 -- This section loads the last processed state from the BatchProcessState table to resume from the last point if the script was interrupted.
 IF EXISTS (SELECT 1 FROM dbo.BatchProcessState)
 BEGIN
+PRINT 'Select from BatchProcessState'
     SELECT TOP 1 
 	@LastProcessedKeyElementId = LastProcessedKeyElementId,
 	@LastProcessedPartitionId = LastProcessedPartitionId,
@@ -96,24 +99,32 @@ BEGIN
 END
 
 -- Step 6: Insert BatchLogs to Remove
+	--print 'select dates'
 	INSERT INTO #tblAUBatchLogId(BatchLogId, StatGroupId)
 	SELECT BatchLogId, StatGroupId
 	FROM [Condensed].[stat].[BatchLog]
-	WHERE DateActivated < @dtRemoveBefore;
+	WHERE DateActivated < @dtRemoveBefore
+	Select count(*) from #tblAUBatchLogId
+	Select @dtRemoveBefore
+
 
 BEGIN TRY
     -- Step 7: Check if Any to Process
-    SELECT @bExists = 1 FROM #tblAUBatchLogId;
+    SELECT @bExists = 1 FROM #tblAUBatchLogId
+	--Select @bExists;
 
     -- Step 8: Insert Records to be Deleted
+	--print 'Select Key, Partition, StatID, 396,438,462, 222,184,091' 
     INSERT INTO #tblStatTypeDelete(KeyElementId, PartitionId, StatId)
     SELECT KeyElementId, PartitionId, StatId
     FROM [IFA].[stat].[StatTypeNumeric0109] st
     INNER JOIN #tblAUBatchLogId bl ON st.BatchLogId = bl.BatchLogId
-    WHERE @bExists = 1 AND StatId IN (113, 115, 116, 117) AND (KeyElementId > ISNULL(@LastProcessedKeyElementId, 0)
+    WHERE @bExists = 1 AND StatId IN (113, 115, 116, 117)
+	AND (KeyElementId > ISNULL(@LastProcessedKeyElementId, 0)
 	OR (KeyElementId = @LastProcessedKeyElementId AND PartitionId > ISNULL(@LastProcessedPartitionId, 0))
 	OR (KeyElementId = @LastProcessedKeyElementId AND PartitionId = @LastProcessedPartitionId AND StatId > ISNULL(@LastProcessedStatId, 0)))
     ORDER BY KeyElementId ASC, PartitionId ASC, StatId ASC;
+
 
     IF @iLogLevel > 2 AND @bExists = 1
     BEGIN
@@ -124,22 +135,25 @@ BEGIN TRY
     END
 
     -- Step 9: Calculate Page Count
+	--Print 'Get iPageSize and Count, 222,185'
     SELECT @iPageCount = CEILING(COUNT(1) / (@iPageSize * 1.0))
     FROM #tblStatTypeDelete src
-    WHERE @bExists = 1;
+    WHERE @bExists = 1
+	Select @iPageCount, @iPageSize, @bExists
+
 
     IF @iLogLevel > 1 AND @bExists = 1
     BEGIN
 	SET @nvMessage2 = @nvMessage + ' Delete PageCount: ' + CONVERT(NVARCHAR(20), @iPageCount) + ' Took ' + CONVERT(NVARCHAR(20), DATEDIFF(MICROSECOND, @dt, SYSUTCDATETIME())) + ' mcs';
-	INSERT INTO [Condensed].[dbo].[StatLog]([Message])
+	--INSERT INTO [Condensed].[dbo].[StatLog]([Message])
 	SELECT @nvMessage2;
 	SET @dt = SYSUTCDATETIME();
     END
 
     -- Step 10: Delete in Pages and Batches with Transactions
+	--print'Select 1 from #tblStatTypeDelete'
     WHILE @bExists = 1 AND @iPageNumber <= @iPageCount
     BEGIN
-	-- Process each page in batches
 	WHILE EXISTS (
 	SELECT 1
 	FROM #tblStatTypeDelete
@@ -147,11 +161,14 @@ BEGIN TRY
 	OR (KeyElementId = @LastProcessedKeyElementId AND PartitionId > ISNULL(@LastProcessedPartitionId, 0))
 	OR (KeyElementId = @LastProcessedKeyElementId AND PartitionId = @LastProcessedPartitionId AND StatId > ISNULL(@LastProcessedStatId, 0))
 )
+
 BEGIN
             -- Begin a new transaction for each batch
+Select @BatchSize
 BEGIN TRANSACTION;
 	BEGIN TRY
-	DELETE dst
+	print 'Select Delete'
+	Select dst.* --DELETE dst
 	FROM [IFA].[stat].[StatTypeNumeric0109] dst
 	INNER JOIN (
 	SELECT TOP (@BatchSize) PartitionId, KeyElementId, StatId
@@ -160,20 +177,19 @@ BEGIN TRANSACTION;
 	OR (KeyElementId = @LastProcessedKeyElementId AND PartitionId > ISNULL(@LastProcessedPartitionId, 0))
 	OR (KeyElementId = @LastProcessedKeyElementId AND PartitionId = @LastProcessedPartitionId AND StatId > ISNULL(@LastProcessedStatId, 0))
 	ORDER BY KeyElementId ASC, PartitionId ASC, StatId ASC
-	) AS src 
-	ON dst.PartitionId = src.PartitionId AND dst.KeyElementId = src.KeyElementId AND dst.StatId = src.StatId;
+	) AS src ON dst.PartitionId = src.PartitionId AND dst.KeyElementId = src.KeyElementId AND dst.StatId = src.StatId;
 
 	-- Update the state table after each batch
 	-- This section updates the BatchProcessState table after processing each batch, ensuring that the script can resume from this point if interrupted.
 IF @@ROWCOUNT > 0
 	BEGIN
+	--Print 'Another Select 1 from tblStatsTypeDelete'
 	DELETE FROM dbo.BatchProcessState;
 	INSERT INTO dbo.BatchProcessState(LastProcessedKeyElementId, LastProcessedPartitionId, LastProcessedStatId, LastProcessedDateTime)
 	SELECT TOP 1 src.KeyElementId, src.PartitionId, src.StatId, SYSUTCDATETIME()
 	FROM #tblStatTypeDelete src
 	ORDER BY src.KeyElementId DESC, src.PartitionId DESC, src.StatId DESC;
-	END
-
+END
 	-- Commit the transaction
 COMMIT TRANSACTION;
 
@@ -187,11 +203,13 @@ IF @iLogLevel > 2
 	END
 
 	-- Increment the batch number and introduce a delay between batches
+	Print 'BatchNumber Assignment'
 	SET @BatchNumber += 1;
 	WAITFOR DELAY @ncDelay;
 	END TRY
 		BEGIN CATCH
-                -- Rollback the transaction in case of error
+
+ -- Rollback the transaction in case of error
 IF XACT_STATE() <> 0
 	BEGIN
 ROLLBACK TRANSACTION;
@@ -209,16 +227,18 @@ IF @iLogLevel > 0
 	SELECT @nvMessage;
 	END
 
-                -- Exit the procedure in case of error
+ -- Exit the procedure in case of error
 	RETURN;
 		END CATCH
 				END
 
-        -- Move to the next page
+ -- Move to the next page
 	SET @iPageNumber += 1;
+	Select @iPageNumber
     END
 END TRY
 BEGIN CATCH
+
     -- Error Handling outside the main loop
     EXEC [IFA].[error].[uspLogErrorDetailInsertOut] @psSchemaName = @sSchemaName, @piErrorDetailId = @iErrorDetailId OUTPUT;
 
@@ -240,7 +260,7 @@ IF XACT_STATE() <> 0
     RETURN;
 END CATCH
 
--- Final Logging
+ -- Final Logging
 IF @iLogLevel > 0
 BEGIN
     SET @nvMessage = N'Executed ' + CASE WHEN (ISNULL(OBJECT_NAME(@@PROCID), N'') = N'') THEN N'a script ( ' + QUOTENAME(HOST_NAME()) + N':' + QUOTENAME(SUSER_SNAME()) + N' SPID=' + CONVERT(NVARCHAR(50), @@SPID) + N' PROCID=' + CONVERT(NVARCHAR(50), @@PROCID) + N' )' 
@@ -250,4 +270,4 @@ BEGIN
     SELECT @nvMessage;
 END
 
---END
+END
