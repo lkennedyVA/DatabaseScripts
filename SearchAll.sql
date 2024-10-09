@@ -93,6 +93,8 @@ WHERE
     m.definition LIKE '%DECLARE @%batch%id% smallint%' -- Look for declared variables matching the pattern
     AND o.type IN ('P', 'FN', 'IF', 'TF')  -- Only include stored procedures and functions
     AND NOT m.definition LIKE '%DECLARE @%TABLE%' -- Exclude table variables
+	AND NOT m.definition Like '%nvThisSourceCode%'
+	and NOT m.definition LIKE '%contentDate%'
 
 union all
 
@@ -128,3 +130,32 @@ ORDER BY
 --FROM INFORMATION_SCHEMA.COLUMNS
 --WHERE TABLE_NAME = 'StatValueBulk'  -- and also for 'HashBulk'
 --AND COLUMN_NAME = 'StatBatchLogId';
+
+--sp_refreshview 'stat.vwBatchRunValueLast'
+--sp_refreshview 'mtb.vwMTBBatchStatBatchLogXref'
+--sp_refreshview 'pnc.vwPNCBatchStatBatchLogXref'
+--sp_refreshview 'report.vwStat_BatchLog'
+--sp_refreshview 'precalc.vwStat_FIPNC_KCP'
+--sp_refreshview 'precalc.vwStat_FIPNC_KCPMaxCheckNumberCleared'
+--sp_refreshview 'pnc.zzzvwBatchTransferToHubAvailable'
+
+--sp_refreshview 
+
+--sp_refreshview 'report.vwCrossBatchLineage'
+--sp_refreshview 'report.vwCrossBatchLineage_metric_wip'
+--sp_refreshview 'report.vwCrossBatchLineage_metric_wip_LSW_Alt_01'
+--sp_refreshview 'report.vwCrossBatchLineage_Today'
+--sp_refreshview 'mtb.vwMTBBatchProcessSegmentTiming' --goes to mtb.vwMTBBatchStatBatchLogXref which will not refresh due to missing objects 
+--sp_refreshview 'mtb.vwMTBBatchProcessSegmentTiming2' --goes to mtb.vwMTBBatchStatBatchLogXref which will not refresh due to missing objects 
+--sp_refreshview 'mtb.vwMTBBatchProcessSegmentTiming2_vertical' --goes to mtb.vwMTBBatchStatBatchLogXref which will not refresh due to missing objects 
+--sp_refreshview 'financial.vwPNCBatchProcessSegmentTiming'
+--sp_refreshview 'financial.vwPNCBatchProcessSegmentTiming_vertical'
+--sp_refreshview 'report.vwStat_BatchLog'
+--sp_refreshview 'report.vwStat_BatchLog'
+--sp_refreshview 'stat.vwStatGroupBatchQueue'
+--sp_refreshview 'stat.vwStatGroupNameBatchQueue'
+--sp_refreshview 'report.vwStatGroupStatKeyTypeXref'
+--sp_refreshview 'mtb.vwMTBBatchStatBatchLogXref' --goes toview on PRDBI02 which will not refresh due to missing objects fromthis proc
+
+--sp_refreshView 'report.vwStat_BatchLog'
+--sp_refreshView 'report.vwStatTransferToHubProgress'
