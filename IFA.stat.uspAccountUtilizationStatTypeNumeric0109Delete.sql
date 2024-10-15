@@ -106,7 +106,7 @@ END
 	--INSERT INTO #tblAUBatchLogId(BatchLogId, StatGroupId)
 	SELECT BatchLogId, DateActivated
 	FROM [Condensed].[stat].[BatchLog]
-	WHERE DateActivated < DATEADD(DAY,-180,SYSUTCDATETIME()) --@dtRemoveBefore
+	WHERE DateActivated < @dtRemoveBefore
 	order by DateActivated
 	--Select count(*) from #tblAUBatchLogId
 	--Select @dtRemoveBefore
@@ -115,7 +115,7 @@ END
 	INSERT INTO #tblAUBatchLogId(IFABatchId, IFABatchVersionEffectDatetime)
 	SELECT IFABatchId, IFABatchVersionEffectDatetime
 	FROM [Condensed].[stat].[IFABatchXref]
-	WHERE IFABatchVersionEffectDatetime < DATEADD(DAY,-180,SYSUTCDATETIME()) --@dtRemoveBefore
+	WHERE IFABatchVersionEffectDatetime < @dtRemoveBefore
 	order by IFABatchVersionEffectDatetime
 	--Select count(*) from #tblAUBatchLogId
 	--Select @dtRemoveBefore
