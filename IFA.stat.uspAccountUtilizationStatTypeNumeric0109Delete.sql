@@ -12,6 +12,8 @@ GO
 	History:
 		2018-03-04 - LBD - Created, full recode
       2024-08-15 - LK  - only pulling statid's in (113,115,116,117), no longer looking to statgroupIDs
+	  2024-10-15 - LK  - Changed [Condensed].[stat].[BatchLog] out for [Condensed].[stat].[IFABatchXref] correct date and updated column names for #tblStatTypeDelete
+						 Lee added the xref table and said we had to switch out the tables for the correct dates.
 *****************************************************************************************/
 ALTER PROCEDURE [stat].[uspAccountUtilizationStatTypeNumeric0109Delete](
 	 @piPageSize INT = 1000
@@ -61,8 +63,8 @@ DECLARE @iLogLevel INT = 3,
 -- Step 3: Create Temporary Tables
 DROP TABLE IF EXISTS #tblAUBatchLogId
 CREATE TABLE #tblAUBatchLogId(
-    BatchLogId SMALLINT PRIMARY KEY,
-    StatGroupId INT
+    IFABatchId SMALLINT PRIMARY KEY,
+    IFABatchVersionEffectDatetime INT
 );
 
 DROP TABLE IF EXISTS #tblStatTypeDelete
@@ -98,14 +100,28 @@ BEGIN
     SELECT @nvMessage;
 END
 
+/*
 -- Step 6: Insert BatchLogs to Remove
 	--print 'select dates'
-	INSERT INTO #tblAUBatchLogId(BatchLogId, StatGroupId)
-	SELECT BatchLogId, StatGroupId
+	--INSERT INTO #tblAUBatchLogId(BatchLogId, StatGroupId)
+	SELECT BatchLogId, DateActivated
 	FROM [Condensed].[stat].[BatchLog]
-	WHERE DateActivated < @dtRemoveBefore
-	Select count(*) from #tblAUBatchLogId
-	Select @dtRemoveBefore
+	WHERE DateActivated < DATEADD(DAY,-180,SYSUTCDATETIME()) --@dtRemoveBefore
+	order by DateActivated
+	--Select count(*) from #tblAUBatchLogId
+	--Select @dtRemoveBefore
+*/
+
+	INSERT INTO #tblAUBatchLogId(IFABatchId, IFABatchVersionEffectDatetime)
+	SELECT IFABatchId, IFABatchVersionEffectDatetime
+	FROM [Condensed].[stat].[IFABatchXref]
+	WHERE IFABatchVersionEffectDatetime < DATEADD(DAY,-180,SYSUTCDATETIME()) --@dtRemoveBefore
+	order by IFABatchVersionEffectDatetime
+	--Select count(*) from #tblAUBatchLogId
+	--Select @dtRemoveBefore
+
+
+	--PrdTrx01.[Condensed].[stat].[IFABatchXref] { [IFABatchId], [IFABatchVersionEffectDatetime] }
 
 
 BEGIN TRY
@@ -118,7 +134,7 @@ BEGIN TRY
     INSERT INTO #tblStatTypeDelete(KeyElementId, PartitionId, StatId)
     SELECT KeyElementId, PartitionId, StatId
     FROM [IFA].[stat].[StatTypeNumeric0109] st
-    INNER JOIN #tblAUBatchLogId bl ON st.BatchLogId = bl.BatchLogId
+    INNER JOIN #tblAUBatchLogId bl ON st.BatchLogId = bl.IFABatchId
     WHERE @bExists = 1 AND StatId IN (113, 115, 116, 117)
 	AND (KeyElementId > ISNULL(@LastProcessedKeyElementId, 0)
 	OR (KeyElementId = @LastProcessedKeyElementId AND PartitionId > ISNULL(@LastProcessedPartitionId, 0))
